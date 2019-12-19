@@ -1,0 +1,84 @@
+// 利用ライブラリ
+// M3W5Ut3Q39AaIwLquryEPMwV62A3znfOO
+var token = "xoxp-何とか";
+
+function ChannelList() {
+  // チャンネル履歴取得用タイムスタンプ作成
+  function getParam() {
+    var date,timestamp;
+    date = new Date();
+    date.setDate(date.getDate() - 30); // N日前
+    timestamp = Math.round(date.getTime() / 1000) + '.000000';
+    var Param = {
+        inclusive:	true,
+        oldest: timestamp,
+        count: 1000
+      };
+    return Param;
+  };
+  
+  // チャンネルID一覧取得  
+  function channelsList(slack) {
+    var list=slack.channelsList(false).channels;
+    var arr = [];
+    for each(var val in list) {
+    // パブリックかつアーカイブされてなければ対象
+      if(val.is_private)  continue;
+      if(val.is_archived) continue;
+      arr.push(val);
+    }
+    return arr;
+  };
+
+  // チャンネルごとの集計
+  function survey(channel) {
+    var counter=[]
+    var reaction=[];
+    var ret = [];
+    for each(var val in channel.messages){
+      // Join Message等を省く
+      if(val.type!="message") continue;
+      // 集計用の変数初期化
+      if(counter[val.user]==undefined) counter[val.user]=0;
+      
+      counter[val.user] = counter[val.user] + 1
+      
+      // メッセージに対するリアクションが配列で入っているので集計してから各ユーザに加算
+      if(val.reactions != undefined) {
+        if(reaction[val.user]==undefined) reaction[val.user]=0;
+        var total=0;
+        for each(var t in val.reactions){
+          total = total + t.count;
+        }
+        reaction[val.user] = reaction[val.user] + total
+      }
+    }
+    
+    // ユーザIDが取れなかったものを消す
+    delete counter["undefined"];
+    delete reaction["undefined"];
+    
+    // (ユーザ名 : 書き込み数 : リアクション数)に変換
+    var List = Object.keys(counter)
+    for each(var val in List){
+      if(reaction[val]==undefined) reaction[val]=0;
+      ret.push(slack.usersInfo(val).user.name + " : " + counter[val] +" : "+reaction[val]);
+    }
+    // 繋いで返す
+    return ret.join(",")
+  };
+  
+  // MAIN
+  var slack = SlackApp.create(token);
+  var cList = channelsList(slack);
+  var Param = getParam();
+  // シートの内容をクリア
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0].clear();
+  for each(var l in cList){  
+    var channel=slack.channelsHistory(l.id, Param);
+    var t = survey(channel);
+    sheet.appendRow([l.id,l.name,t])
+  }
+  return;
+}
+
